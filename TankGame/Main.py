@@ -20,8 +20,8 @@ class GameMain:
 
         self.stage = 1
         self.keys = set()
-        self.shells = []
-        self.explosions = [] 
+        self.shells = []     # 동시에 여러 포탄이 날아다니는 걸 구현하려 했으나 못함
+        self.explosions = [] # 동시에 여러 폭발을 구현하려 했으나 못함
         
         # 턴 및 환경 변수
         self.current_turn = "PLAYER" # 현재 누구 턴인지
@@ -68,6 +68,7 @@ class GameMain:
         pygame.quit()
         self.window.destroy()        
         
+    # 처음 시작 시, 다음 스테이지 시작 시(즉, 업그레이드 적용 후), 게임 오버 후 r 눌렀을 시 실행
     def init_stage(self):
         # 스테이지 초기화
         self.terrain.reset_terrain(self.stage)
@@ -180,7 +181,7 @@ class GameMain:
         dx = self.player.x - self.computer.x        # 수평 거리 차이
         dy = self.player.y - (self.computer.y - 25) # 수직 거리 차이, 포탄이 발사되는 높이를 고려해 25 빼줌
 
-        H = random.randint(50, 300) # 포탄의 최대 고도,
+        H = random.randint(-50, 350) # 포탄의 최대 고도,
         vy = -math.sqrt(2 * config.GRAVITY * ((self.computer.y - 25) - H))  # 수직 초기 속도
 
         # 발사 각도랑 강도 계산을 위한 근의 공식에 들어갈 계수들
@@ -284,48 +285,53 @@ class GameMain:
         self.stage += 1
         self.init_stage()
 
+    # Main 루프 속 함수
     def process(self):
+        # 플레이어 턴
         if self.game_state in [config.STATE_PLAYER_MOVE, config.STATE_PLAYER_AIM, config.STATE_PLAYER_POWER]:
             self.handle_input()
 
+        # 폭발 이펙트 처리
         for exp in self.explosions[:]:
             if not exp.update():
                 self.explosions.remove(exp)
 
+        # 포탄 날아가는 과정 처리
         if self.game_state == config.STATE_SHELL_ACTIVE:
-            if self.game_state in [config.STATE_STAGE_CLEAR, config.STATE_GAME_OVER]:
-                pass 
-            else:
-                if not self.shells:
-                    self.game_state = config.STATE_TURN_TRANSITION
-                    self.turn_timer = 40 
+            
+            # 포탄이 (충돌 후) 제거되면 다음 game_state로 변경
+            if not self.shells:
+                self.game_state = config.STATE_TURN_TRANSITION
+                self.turn_timer = 40 
                 
-                for shell in self.shells[:]:
-                    target_list = [self.computer, self.player]
-                    hit_result = shell.update(target_list)
+            for shell in self.shells[:]:
+                target_list = [self.computer, self.player]
+                hit_result = shell.update(target_list) # hit_result는 None, "ground", 또는 Tank 객체 값을 지님
                     
-                    if hit_result:
-                        self.explosions.append(Explosion(self.canvas, shell.x, shell.y))
-                        self.sound_hit.play()
+                if hit_result:
+                    self.explosions.append(Explosion(self.canvas, shell.x, shell.y))
+                    self.sound_hit.play()
                         
-                        if isinstance(hit_result, Tank):
-                            if self.computer.hp <= 0:
-                                self.game_state = config.STATE_STAGE_CLEAR
-                                self.upgrade_selection = 0 
-                                self.shells = []
-                                if self.stage >= 1:
-                                   self.show_upgrade_menu()
-                                break
-                            elif self.player.hp <= 0:
-                                self.sound_game_over.play()
-                                self.game_state = config.STATE_GAME_OVER
-                                self.canvas.create_text(config.SCREEN_WIDTH//2, config.SCREEN_HEIGHT//2,
-                                                       text="GAME OVER\nPress 'R' to Restart", font=("Arial", 40), fill="black", justify=CENTER)
-                                break
+                    # 포탄이 탱크에 맞고 탱크 체력이 0 이하로 내려갔을 때
+                    if isinstance(hit_result, Tank):
+                        if self.computer.hp <= 0:
+                            self.game_state = config.STATE_STAGE_CLEAR
+                            self.upgrade_selection = 0 
+                            self.shells = []
+                            if self.stage >= 1:
+                                self.show_upgrade_menu()
+                            break
+                        elif self.player.hp <= 0:
+                            self.sound_game_over.play()
+                            self.game_state = config.STATE_GAME_OVER
+                            self.canvas.create_text(config.SCREEN_WIDTH//2, config.SCREEN_HEIGHT//2,
+                                                    text="GAME OVER\nPress 'R' to Restart", font=("Arial", 40), fill="black", justify=CENTER)
+                            break
 
-                    if not shell.is_active:
-                        self.shells.remove(shell)
+                if not shell.is_active:
+                    self.shells.remove(shell)
 
+        # 약간의 텀을 두고 턴 전환
         if self.game_state == config.STATE_TURN_TRANSITION:
             if self.game_state not in [config.STATE_STAGE_CLEAR, config.STATE_GAME_OVER]:
                 self.turn_timer -= 1
