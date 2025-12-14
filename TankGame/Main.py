@@ -4,7 +4,7 @@ from tkinter import *
 import random
 import math
 import config
-import time # 루프 대기 시간을 위해 추가
+import pygame
 from terrain import Terrain
 from objects import Tank, Explosion
 
@@ -35,6 +35,22 @@ class GameMain:
 
         self.window.bind("<KeyPress>", self.key_press)
         self.window.bind("<KeyRelease>", self.key_release)
+
+        # 사운드
+        pygame.init()
+        pygame.mixer.init()
+
+        # 배경음악을 불러와 반복 재생 설정하고 소리 줄임
+        pygame.mixer.music.load("sound/bgm.mp3")
+        pygame.mixer.music.play(-1)
+        pygame.mixer.music.set_volume(0.05)
+
+        # 사운드 효과 불러오기
+        self.sound_fire = pygame.mixer.Sound("sound/fire.mp3")
+        self.sound_fire.set_volume(0.12)
+        self.sound_hit = pygame.mixer.Sound("sound/hit.mp3")
+        self.sound_hit.set_volume(0.1)
+        self.sound_game_over = pygame.mixer.Sound("sound/game_over.mp3")
         
         # 게임 Main 루프
         while True:
@@ -47,6 +63,11 @@ class GameMain:
             self.window.after(33) # 33ms 대기 (fps 조절)
             self.window.update()  # 화면 업데이트
 
+    def on_close(self):
+        pygame.mixer.music.stop()
+        pygame.quit()
+        self.window.destroy()        
+        
     def init_stage(self):
         # 스테이지 초기화
         self.terrain.reset_terrain(self.stage)
@@ -126,6 +147,7 @@ class GameMain:
             self.keys.remove(event.keysym)
 
     def fire_shell(self, shooter):
+        self.sound_fire.play()
         shell = shooter.fire()
         self.shells.append(shell)
 
@@ -284,6 +306,7 @@ class GameMain:
                     
                     if hit_result:
                         self.explosions.append(Explosion(self.canvas, shell.x, shell.y))
+                        self.sound_hit.play()
                         
                         if isinstance(hit_result, Tank):
                             if self.computer.hp <= 0:
@@ -294,6 +317,7 @@ class GameMain:
                                    self.show_upgrade_menu()
                                 break
                             elif self.player.hp <= 0:
+                                self.sound_game_over.play()
                                 self.game_state = config.STATE_GAME_OVER
                                 self.canvas.create_text(config.SCREEN_WIDTH//2, config.SCREEN_HEIGHT//2,
                                                        text="GAME OVER\nPress 'R' to Restart", font=("Arial", 40), fill="black", justify=CENTER)
